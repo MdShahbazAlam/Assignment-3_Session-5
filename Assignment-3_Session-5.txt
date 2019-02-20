@@ -1,0 +1,136 @@
+Assignment-3_Session-5
+
+Problem Statement:
+
+Import dataset from the following link: AirQuality Data Set
+
+Perform the following written operations:
+1. Read the file in Zip format and get into R.
+Answer-
+# Unzip the file in the directory
+Air_Quality <- unzip("AirQualityUCI.zip", "AirQualityUCI.csv", "AirQualityUCI.xlsx")
+# There were two file in the csv and xlsx format, the below code read the csv file.
+Air_Quality_csv <- read.csv("AirQualityUCI.csv", header = T, sep = ";")
+
+
+2. Create Univariate for all the columns.
+Answer-
+Air_Quality_csv <- read.csv("AirQualityUCI.csv", header = T, sep = ";")
+par(mfrow=c(3,4))
+for(i in seq(1,length(Air_Quality_csv),1)){
+  plot(Air_Quality_csv[,i], ylab = names(Air_Quality_csv[i]), type="l")
+}
+
+
+3. Check for missing values in all columns.
+Answer-
+Air_Quality_csv <- read.csv("AirQualityUCI.csv", header = T, sep = ";")
+sapply(Air_Quality_csv, function(x) sum(is.na(x)))
+
+
+4. Impute the missing values using appropriate methods.
+Answer-
+names(Air_Quality_csv)
+library(mice)
+# Impute missing values
+impute <- mice(Air_Quality_csv[,-c(1,2)], m=5, maxit = 5, method = 'cart', seed = 100)
+summary(impute)
+# Replaces the NAs with imputed values
+Air_Quality_csv <- complete(impute) 
+str(complete)
+# Check missing values
+sapply(complete, function(x) sum(is.na(x)))
+
+
+5. Create bi-variate analysis for all relationships.
+Answer-
+# Plotting values of the column
+cor(complete)
+# Plotting graphs of the column
+pairs(complete)
+
+6. Test relevant hypothesis for valid relations.
+Answer-
+final <- complete
+final$Date <- Air_Quality_csv$Date
+final$Time <- Air_Quality_csv$Time
+library(stringr)
+final$Time1 <- sub(".+? ", "", final$Time)
+final$datetime <- as.POSIXct(paste(final$Date, final$Time1), format="%Y-%m-%d %H:%M:%S")
+View(final)
+str(final)
+
+t.test(final$`CO(GT)`, final$`PT08.S1(CO)`, paired = T)
+t.test(final$`C6H6(GT)`, final$`PT08.S2(NMHC)`, paired = T)
+t.test(final$`NOx(GT)`, final$`PT08.S3(NOx)`, paired = T)
+
+mod <- lm(final$`CO(GT)`~final$Date1)
+summary(mod)
+
+mod <- lm(final$`CO(GT)`~final$T)
+summary(mod)
+
+mod <- lm(final$`CO(GT)`~final$RH)
+summary(mod)
+
+
+7. Create cross tabulations with derived variables.
+Answer-
+range(final$RH)
+final <- within(final,
+            {
+              Tcat <- NA
+              Tcat[T<0] <- "Minus"
+              Tcat[T>=0 & T<=10] <- "Low"
+              Tcat[T>10 & T<=20] <- "Medium"
+              Tcat[T>20 & T<=30] <- "High"
+              Tcat[T>30] <- "Very High"
+            })
+
+final <- within(final,
+                {
+                  RHcat <- NA
+                  RHcat[RH<20] <- "Very Low"
+                  RHcat[RH>=20 & RH<=40] <- "Low"
+                  RHcat[RH>40 & RH<=60] <- "Medium"
+                  RHcat[RH>60 & RH<=80] <- "High"
+                  RHcat[RH>80] <- "Very High"
+                })
+
+mytable <- xtabs(`CO(GT)` ~ +Tcat +RHcat, data = final)
+ftable(mytable)  # print table 
+summary(mytable) # chi-square test of indepedence
+
+mytable <- xtabs(`C6H6(GT)` ~ +Tcat +RHcat, data = final)
+ftable(mytable)  # print table 
+summary(mytable) # chi-square test of indepedence
+
+mytable <- xtabs(`NOx(GT)` ~ +Tcat +RHcat, data = final)
+ftable(mytable)  # print table 
+summary(mytable) # chi-square test of indepedence
+
+with(final, tapply(`NO2(GT)`, list(Tcat=Tcat, RHcat=RHcat), sd)) # using with()
+with(final, tapply(`NO2(GT)`, list(Tcat=Tcat, RHcat=RHcat), mean))
+
+
+8. Check for trends and patterns in time series.
+Answer-
+library(xts)
+
+timeseries <- xts(final$`CO(GT)`, final$datetime)
+plot(timeseries)
+summary(timeseries)
+
+
+9. Find out the most polluted time of the day and the name of the chemical compound.
+Answer-
+names(final)
+library(dplyr)
+
+polluted <- final%>%group_by(Time)%>%
+  select(Time, `CO(GT)`, `C6H6(GT)`, `NO2(GT)`, `NOx(GT)` )%>%
+  summarise(CO = mean(`CO(GT)`), C6H6 = mean(`C6H6(GT)`), NO2 = mean(`NO2(GT)`), NOX =mean(`NOx(GT)`))%>%
+  
+polluted[c(which.max(polluted$CO),which.max(polluted$C6H6),which.max(polluted$NO2),which.max(polluted$NOX)),]
+
+# 19:00:00 is the most polluted time of the day with CO, C6H6, NO2 & NOx
